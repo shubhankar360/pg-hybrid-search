@@ -7,11 +7,11 @@
  * Writes results/benchmark.md and results/benchmark.json.
  */
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { openDb, migrate } from "./db.js";
+import { enableBm25, openDb, migrate } from "./db.js";
 import { fetchScifact, loadScifact } from "./data.js";
 import { cachePath, readCache } from "./precompute.js";
 import { upsertDocs } from "./ingest.js";
-import { fts, hybrid, vector, type Hit } from "./search.js";
+import { bm25, fts, hybrid, vector, type Hit } from "./search.js";
 import { mean, mrrAt, ndcgAt, percentile, recallAt } from "./metrics.js";
 
 
@@ -32,17 +32,27 @@ async function main() {
   let t = Date.now();
   await upsertDocs(db, corpus, dv);
   const ingestMs = Date.now() - t;
+  const hasBm25 = await enableBm25(db);
   console.log(`ingested + indexed in ${(ingestMs / 1000).toFixed(1)}s (${db.kind})`);
 
-  type Method = { name: string; note: string; setup?: string; run: (i: number, k: number) => Promise<Hit[]> };
+  type Method = { name: string; note: string; setup?: string; teardown?: string; run: (i: number, k: number) => Promise<Hit[]> };
   const K = 100;
   const methods: Method[] = [
     { name: "fts-and", note: "plainto_tsquery: every term required", run: (i, k) => fts(db, queries[i].text, k, "and") },
     { name: "fts-or", note: "OR of terms, ranked by ts_rank_cd", run: (i, k) => fts(db, queries[i].text, k, "or") },
     { name: "vector-exact", note: "sequential scan, true nearest neighbours", run: (i, k) => vector(db, qv[i], k, true) },
     { name: "vector-hnsw ef_search=40", note: "pgvector default", setup: "SET hnsw.ef_search = 40", run: (i, k) => vector(db, qv[i], k) },
-    { name: "vector-hnsw ef_search=200", note: "ef_search raised above k", setup: "SET hnsw.ef_search = 200", run: (i, k) => vector(db, qv[i], k) },
-    { name: "hybrid-rrf", note: "fts-or + hnsw(200), RRF k=60, depth 100", setup: "SET hnsw.ef_search = 200", run: (i, k) => hybrid(db, queries[i].text, qv[i], k, 100) },
+    // With statistics present, ef_search=200 makes the planner cost the HNSW
+    // scan above a seq scan + sort on 5k rows and silently run the exact query.
+    // enable_seqscan=off measures the index itself.
+    { name: "vector-hnsw ef_search=200", note: "ef_search raised above k; index forced", setup: "SET hnsw.ef_search = 200; SET enable_seqscan = off",
+      teardown: "RESET enable_seqscan", run: (i, k) => vector(db, qv[i], k) },
+    { name: "hybrid-rrf (fts)", note: "fts-or + hnsw(200), RRF k=60, depth 100", setup: "SET hnsw.ef_search = 200", run: (i, k) => hybrid(db, queries[i].text, qv[i], k, 100) },
+    ...(hasBm25 ? [
+      { name: "bm25", note: "pg_textsearch, Okapi BM25 (k1 1.2, b 0.75)", run: (i: number, k: number) => bm25(db, queries[i].text, k) },
+      { name: "hybrid-rrf (bm25)", note: "bm25 + hnsw(200), RRF k=60, depth 100", setup: "SET hnsw.ef_search = 200",
+        run: (i: number, k: number) => hybrid(db, queries[i].text, qv[i], k, 100, 60, "bm25") },
+    ] : []),
   ];
 
   const exact = new Map<number, string[]>();
@@ -70,6 +80,7 @@ async function main() {
       annRecall10: overlap.length ? mean(overlap) : null,
     };
     rows.push(row);
+    if (m.teardown) await db.exec(m.teardown);
     console.log(`${m.name.padEnd(28)} nDCG@10 ${row.ndcg10.toFixed(3)}  R@100 ${row.recall100.toFixed(3)}  MRR@10 ${row.mrr10.toFixed(3)}  p50 ${row.p50ms.toFixed(1)}ms  returned ${row.meanReturned.toFixed(1)}`);
   }
   await db.close();

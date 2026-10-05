@@ -1,0 +1,102 @@
+{
+  "meta": {
+    "dataset": "BEIR SciFact (test)",
+    "docs": 5183,
+    "queries": 300,
+    "embedder": "all-MiniLM-L6-v2",
+    "backend": "pglite",
+    "ingestSeconds": 37.253,
+    "node": "v24.18.0",
+    "date": "2026-10-05"
+  },
+  "rows": [
+    {
+      "method": "fts-and",
+      "note": "plainto_tsquery: every term required",
+      "ndcg10": 0.07027475306262738,
+      "recall100": 0.06944444444444445,
+      "mrr10": 0.07333333333333333,
+      "p50ms": 28.582498000003397,
+      "p95ms": 33.88459999999759,
+      "meanReturned": 0.08666666666666667,
+      "annRecall10": null
+    },
+    {
+      "method": "fts-or",
+      "note": "OR of terms, ranked by ts_rank_cd",
+      "ndcg10": 0.3621331129054791,
+      "recall100": 0.773,
+      "mrr10": 0.31760582010582006,
+      "p50ms": 98.30629600000248,
+      "p95ms": 555.1422239999956,
+      "meanReturned": 99.79,
+      "annRecall10": null
+    },
+    {
+      "method": "vector-exact",
+      "note": "sequential scan, true nearest neighbours",
+      "ndcg10": 0.6433601534792647,
+      "recall100": 0.925,
+      "mrr10": 0.5998531746031744,
+      "p50ms": 76.8896390000009,
+      "p95ms": 183.85182399999758,
+      "meanReturned": 100,
+      "annRecall10": null
+    },
+    {
+      "method": "vector-hnsw ef_search=40",
+      "note": "pgvector default",
+      "ndcg10": 0.636693486812598,
+      "recall100": 0.8753333333333334,
+      "mrr10": 0.5931865079365078,
+      "p50ms": 3.8044150000205263,
+      "p95ms": 5.734639000002062,
+      "meanReturned": 40,
+      "annRecall10": 0.9883333333333333
+    },
+    {
+      "method": "vector-hnsw ef_search=200",
+      "note": "ef_search raised above k; index forced",
+      "ndcg10": 0.6433601534792647,
+      "recall100": 0.925,
+      "mrr10": 0.5998531746031744,
+      "p50ms": 6.878390999976546,
+      "p95ms": 8.640386999992188,
+      "meanReturned": 100,
+      "annRecall10": 0.9996666666666666
+    },
+    {
+      "method": "hybrid-rrf (fts)",
+      "note": "fts-or + hnsw(200), RRF k=60, depth 100",
+      "ndcg10": 0.5974302750967223,
+      "recall100": 0.9366666666666666,
+      "mrr10": 0.5630304232804232,
+      "p50ms": 134.4388489999983,
+      "p95ms": 261.5209029999969,
+      "meanReturned": 100,
+      "annRecall10": null
+    },
+    {
+      "method": "bm25",
+      "note": "pg_textsearch, Okapi BM25 (k1 1.2, b 0.75)",
+      "ndcg10": 0.6893055983031356,
+      "recall100": 0.9182222222222223,
+      "mrr10": 0.6526031746031746,
+      "p50ms": 128.99846899998374,
+      "p95ms": 340.4153070000175,
+      "meanReturned": 99.79,
+      "annRecall10": null
+    },
+    {
+      "method": "hybrid-rrf (bm25)",
+      "note": "bm25 + hnsw(200), RRF k=60, depth 100",
+      "ndcg10": 0.7119223617515643,
+      "recall100": 0.9533333333333334,
+      "mrr10": 0.6764285714285713,
+      "p50ms": 163.0427469999995,
+      "p95ms": 341.5656420000014,
+      "meanReturned": 100,
+      "annRecall10": null
+    }
+  ]
+}

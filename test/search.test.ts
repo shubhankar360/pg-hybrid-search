@@ -4,10 +4,10 @@
  * on both backends.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { migrate, openDb, toVector, type Db } from "../src/db.js";
+import { enableBm25, migrate, openDb, toVector, type Db } from "../src/db.js";
 import { HashEmbedder, cosine } from "../src/embed.js";
 import { upsertDocs } from "../src/ingest.js";
-import { fts, hybrid, orQuery, rrf, vector } from "../src/search.js";
+import { bm25, fts, hybrid, orQuery, rrf, vector } from "../src/search.js";
 import { mrrAt, ndcgAt, percentile, recallAt } from "../src/metrics.js";
 
 const DOCS = [
@@ -20,6 +20,7 @@ const DOCS = [
 ];
 
 let db: Db;
+let hasBm25 = false;
 const emb = new HashEmbedder(64);
 
 beforeAll(async () => {
@@ -27,13 +28,14 @@ beforeAll(async () => {
   await db.exec("DROP TABLE IF EXISTS docs");
   await migrate(db, emb.dims);
   await upsertDocs(db, DOCS, await emb.embed(DOCS.map((d) => `${d.title}. ${d.body}`)));
+  hasBm25 = await enableBm25(db); // PGlite bundles pg_textsearch; the stock pgvector image does not
 });
 afterAll(async () => db?.close());
 
 describe("schema", () => {
   it("generates the weighted tsvector and indexes both columns", async () => {
     const idx = await db.query<{ indexname: string }>("SELECT indexname FROM pg_indexes WHERE tablename = 'docs' ORDER BY 1");
-    expect(idx.map((r) => r.indexname)).toEqual(["docs_embedding_idx", "docs_pkey", "docs_tsv_idx"]);
+    expect(idx.map((r) => r.indexname).filter((n) => n !== "docs_bm25_idx")).toEqual(["docs_embedding_idx", "docs_pkey", "docs_tsv_idx"]);
     const [r] = await db.query<{ tsv: string }>("SELECT tsv::text AS tsv FROM docs WHERE id = 'd1'");
     expect(r.tsv).toMatch(/'vitamin':1A/); // title terms carry weight A
   });
@@ -101,6 +103,26 @@ describe("hybrid", () => {
     const [qv] = await emb.embed(["the of and"]);
     const hits = await hybrid(db, "the of and", qv, 3);
     expect(hits).toHaveLength(3); // vector leg alone
+  });
+});
+
+describe("bm25 (pg_textsearch)", () => {
+  it("ranks by BM25 and skips non-matching documents", async (ctx) => {
+    if (!hasBm25) return ctx.skip();
+    const hits = await bm25(db, "vitamin bone density", 10);
+    expect(hits[0].id).toBe("d1");
+    expect(hits.map((h) => h.id)).not.toContain("d2"); // no shared terms
+    expect(hits.every((h) => h.score > 0)).toBe(true);
+  });
+
+  it("BM25 hybrid equals reference RRF", async (ctx) => {
+    if (!hasBm25) return ctx.skip();
+    const q = "sleep and memory";
+    const [qv] = await emb.embed([q]);
+    const lex = (await bm25(db, q, 100)).map((h) => h.id);
+    const sem = (await vector(db, qv, 100, true)).map((h) => h.id);
+    const sql = await hybrid(db, q, qv, 5, 100, 60, "bm25");
+    expect(sql.map((h) => h.id)).toEqual(rrf([lex, sem], 5).map((h) => h.id));
   });
 });
 

@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS docs (
   id        text PRIMARY KEY,
   title     text NOT NULL DEFAULT '',
   body      text NOT NULL,
+  content   text GENERATED ALWAYS AS (coalesce(title, '') || '. ' || body) STORED,
   tsv       tsvector GENERATED ALWAYS AS (
               setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
               setweight(to_tsvector('english', body), 'B')

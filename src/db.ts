@@ -49,7 +49,8 @@ export async function openDb(url = process.env.DATABASE_URL, opts: { schema?: st
   }
   const { PGlite } = await import("@electric-sql/pglite");
   const { vector } = await import("@electric-sql/pglite-pgvector");
-  const db = new PGlite({ extensions: { vector } });
+  const { pg_textsearch } = await import("@electric-sql/pglite-pg_textsearch");
+  const db = new PGlite({ extensions: { vector, pg_textsearch } });
   return {
     kind: "pglite",
     async query(sql, params) {
@@ -75,6 +76,21 @@ export async function migrate(db: Db, dims: number): Promise<void> {
   }
   const sql = readFileSync(new URL("./schema.sql", import.meta.url), "utf8").replaceAll("{{DIMS}}", String(dims));
   await db.exec(sql);
+}
+
+/**
+ * BM25 via the pg_textsearch extension, where the server has it (PGlite
+ * bundles it; the stock pgvector image does not). Returns whether BM25 is
+ * available, so callers can fall back to ts_rank_cd.
+ */
+export async function enableBm25(db: Db): Promise<boolean> {
+  try {
+    await db.exec("CREATE EXTENSION IF NOT EXISTS pg_textsearch SCHEMA public");
+    await db.exec("CREATE INDEX IF NOT EXISTS docs_bm25_idx ON docs USING bm25 (content) WITH (text_config = 'english')");
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** pgvector's text input format. */

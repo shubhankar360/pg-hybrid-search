@@ -39,6 +39,22 @@ export async function fts(db: Db, q: string, k: number, mode: "and" | "or" = "or
 }
 
 /**
+ * Okapi BM25 through pg_textsearch (k1 = 1.2, b = 0.75). Its operator returns
+ * the negated score, so lower is better and 0 means no term matched.
+ */
+export async function bm25(db: Db, q: string, k: number): Promise<Hit[]> {
+  if (!orQuery(q)) return [];
+  return db.query<Hit>(
+    `SELECT id, -(content <@> to_bm25query($1, 'docs_bm25_idx'))::float8 AS score
+       FROM docs
+      WHERE content <@> to_bm25query($1, 'docs_bm25_idx') < 0
+      ORDER BY content <@> to_bm25query($1, 'docs_bm25_idx'), id
+      LIMIT $2`,
+    [q, k],
+  );
+}
+
+/**
  * Nearest neighbours by cosine distance. ``exact`` defeats the HNSW index on
  * purpose ("+ 0" means the ORDER BY no longer matches the indexed operator),
  * which gives the ground truth the approximate index is measured against.
@@ -58,13 +74,20 @@ export async function vector(db: Db, qv: ArrayLike<number>, k: number, exact = f
  * Each leg is ranked inside a LIMITed subquery first, so the vector leg can
  * use its HNSW index; only then is the rank numbered and fused.
  */
-export async function hybrid(db: Db, q: string, qv: ArrayLike<number>, k: number, depth = 100, rrfK = 60): Promise<Hit[]> {
-  return db.query<Hit>(
-    `WITH tq AS (SELECT to_tsquery('english', $1) AS query),
-     lex AS (
+export async function hybrid(db: Db, q: string, qv: ArrayLike<number>, k: number, depth = 100, rrfK = 60,
+                             lexical: "fts" | "bm25" = "fts"): Promise<Hit[]> {
+  const lexLeg = lexical === "bm25"
+    ? `lex AS (
+       SELECT id, row_number() OVER (ORDER BY s, id) AS r FROM (
+         SELECT id, content <@> to_bm25query($6, 'docs_bm25_idx') AS s FROM docs
+          WHERE content <@> to_bm25query($6, 'docs_bm25_idx') < 0 ORDER BY s, id LIMIT $3) l),`
+    : `lex AS (
        SELECT id, row_number() OVER (ORDER BY s DESC, id) AS r FROM (
          SELECT id, ts_rank_cd(tsv, tq.query) AS s FROM docs, tq
-          WHERE $1 <> '' AND tsv @@ tq.query ORDER BY s DESC, id LIMIT $3) l),
+          WHERE $1 <> '' AND tsv @@ tq.query ORDER BY s DESC, id LIMIT $3) l),`;
+  return db.query<Hit>(
+    `WITH tq AS (SELECT to_tsquery('english', $1) AS query),
+     ${lexLeg}
      sem AS (
        SELECT id, row_number() OVER (ORDER BY d, id) AS r FROM (
          SELECT id, embedding <=> $2::vector AS d FROM docs ORDER BY d LIMIT $3) v)
@@ -73,7 +96,7 @@ export async function hybrid(db: Db, q: string, qv: ArrayLike<number>, k: number
       GROUP BY id
       ORDER BY score DESC, id
       LIMIT $5`,
-    [orQuery(q), toVector(qv), depth, rrfK, k],
+    lexical === "bm25" ? [orQuery(q), toVector(qv), depth, rrfK, k, q] : [orQuery(q), toVector(qv), depth, rrfK, k],
   );
 }
 

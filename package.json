@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",
+    "@electric-sql/pglite-pg_textsearch": "^0.0.10",
     "@electric-sql/pglite-pgvector": "^0.0.9",
     "@huggingface/transformers": "^4.3.0",
     "onnxruntime-web": "^1.31.0-dev.20260914-8d85527a0",
@@ -23,8 +24,8 @@
     "tsx": "^4.23.15"
   },
   "devDependencies": {
-    "@types/pg": "^8.23.1",
     "@types/node": "^26.6.4",
+    "@types/pg": "^8.23.1",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3"
   }
