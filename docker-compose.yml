@@ -1,0 +1,24 @@
+# Production-shaped stack: real Postgres with pgvector, and the API on top.
+#   docker compose up --build
+#   curl -X POST localhost:8080/docs -d '[{"id":"1","title":"Hello","body":"pgvector and full-text in one query"}]'
+#   curl 'localhost:8080/search?q=vector+search&mode=hybrid'
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: search
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d search"]
+      interval: 2s
+      retries: 30
+    volumes: [pgdata:/var/lib/postgresql/data]
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/search
+    ports: ["8080:8080"]
+    depends_on:
+      db: { condition: service_healthy }
+volumes:
+  pgdata: {}

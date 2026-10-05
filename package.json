@@ -1,0 +1,31 @@
+{
+  "name": "pg-hybrid-search",
+  "version": "0.1.0",
+  "description": "Hybrid search inside Postgres: full-text + pgvector fused with RRF in one SQL query, benchmarked on BEIR SciFact",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "test": "vitest run",
+    "bench": "tsx src/bench.ts",
+    "serve": "tsx src/server.ts",
+    "fetch-data": "tsx src/data.ts --fetch",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@electric-sql/pglite-pgvector": "^0.0.9",
+    "@huggingface/transformers": "^4.3.0",
+    "onnxruntime-web": "^1.31.0-dev.20260914-8d85527a0",
+    "pg": "^8.23.1",
+    "tsx": "^4.23.15"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1",
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}
