@@ -28,7 +28,7 @@ beforeAll(async () => {
   await migrate(db, emb.dims);
   await upsertDocs(db, DOCS, await emb.embed(DOCS.map((d) => `${d.title}. ${d.body}`)));
 });
-afterAll(async () => db.close());
+afterAll(async () => db?.close());
 
 describe("schema", () => {
   it("generates the weighted tsvector and indexes both columns", async () => {

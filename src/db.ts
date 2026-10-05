@@ -65,9 +65,11 @@ export async function openDb(url = process.env.DATABASE_URL, opts: { schema?: st
 export async function migrate(db: Db, dims: number): Promise<void> {
   // Two clients racing CREATE EXTENSION IF NOT EXISTS can both pass the
   // "not exists" check; the loser gets a unique violation. It is harmless:
-  // the extension exists either way.
+  // the extension exists either way. SCHEMA public matters too: without it
+  // the extension lands in the first schema on the search_path, and every
+  // other schema then fails with 'type "vector" does not exist'.
   try {
-    await db.exec("CREATE EXTENSION IF NOT EXISTS vector");
+    await db.exec("CREATE EXTENSION IF NOT EXISTS vector SCHEMA public");
   } catch (e) {
     if (!["23505", "42710"].includes((e as { code?: string }).code ?? "")) throw e;
   }

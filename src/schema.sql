@@ -2,7 +2,7 @@
 -- search (title outranks body) and a pgvector embedding with an HNSW index.
 -- Keeping them in one row means hybrid search is a single query and a
 -- document can never exist in one index but not the other.
-CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS vector SCHEMA public;
 
 CREATE TABLE IF NOT EXISTS docs (
   id        text PRIMARY KEY,

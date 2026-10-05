@@ -19,8 +19,8 @@ beforeAll(async () => {
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
 afterAll(async () => {
-  await new Promise((r) => server.close(r));
-  await db.close();
+  if (server) await new Promise((r) => server.close(r));
+  await db?.close();
 });
 
 it("ingests and searches in every mode", async () => {
