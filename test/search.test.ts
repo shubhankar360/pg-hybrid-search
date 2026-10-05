@@ -23,7 +23,7 @@ let db: Db;
 const emb = new HashEmbedder(64);
 
 beforeAll(async () => {
-  db = await openDb();
+  db = await openDb(undefined, { schema: "test_search" });
   await db.exec("DROP TABLE IF EXISTS docs");
   await migrate(db, emb.dims);
   await upsertDocs(db, DOCS, await emb.embed(DOCS.map((d) => `${d.title}. ${d.body}`)));

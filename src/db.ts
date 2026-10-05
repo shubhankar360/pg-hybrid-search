@@ -19,10 +19,23 @@ export interface Db {
   readonly kind: "pglite" | "postgres";
 }
 
-export async function openDb(url = process.env.DATABASE_URL): Promise<Db> {
+/**
+ * ``schema`` isolates callers that share one server: every pooled connection
+ * gets it first on its search_path. Test files run in parallel, and on a
+ * shared server two of them creating the same table at once is a race that
+ * an in-process database never shows.
+ */
+export async function openDb(url = process.env.DATABASE_URL, opts: { schema?: string } = {}): Promise<Db> {
   if (url) {
     const { default: pg } = await import("pg");
-    const pool = new pg.Pool({ connectionString: url, max: 4 });
+    const schema = opts.schema && /^[a-z_][a-z0-9_]*$/.test(opts.schema) ? opts.schema : undefined;
+    if (schema) {
+      const admin = new pg.Client({ connectionString: url });
+      await admin.connect();
+      await admin.query(`CREATE SCHEMA IF NOT EXISTS ${schema}`);
+      await admin.end();
+    }
+    const pool = new pg.Pool({ connectionString: url, max: 4, ...(schema ? { options: `-c search_path=${schema},public` } : {}) });
     return {
       kind: "postgres",
       async query(sql, params) {
@@ -50,6 +63,14 @@ export async function openDb(url = process.env.DATABASE_URL): Promise<Db> {
 }
 
 export async function migrate(db: Db, dims: number): Promise<void> {
+  // Two clients racing CREATE EXTENSION IF NOT EXISTS can both pass the
+  // "not exists" check; the loser gets a unique violation. It is harmless:
+  // the extension exists either way.
+  try {
+    await db.exec("CREATE EXTENSION IF NOT EXISTS vector");
+  } catch (e) {
+    if (!["23505", "42710"].includes((e as { code?: string }).code ?? "")) throw e;
+  }
   const sql = readFileSync(new URL("./schema.sql", import.meta.url), "utf8").replaceAll("{{DIMS}}", String(dims));
   await db.exec(sql);
 }

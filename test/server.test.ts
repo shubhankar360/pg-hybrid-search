@@ -10,7 +10,7 @@ let server: Server;
 let base: string;
 
 beforeAll(async () => {
-  db = await openDb();
+  db = await openDb(undefined, { schema: "test_server" });
   await db.exec("DROP TABLE IF EXISTS docs");
   const emb = new HashEmbedder(32);
   await migrate(db, emb.dims);
