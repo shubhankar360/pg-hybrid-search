@@ -34,7 +34,7 @@ afterAll(async () => db?.close());
 
 describe("schema", () => {
   it("generates the weighted tsvector and indexes both columns", async () => {
-    const idx = await db.query<{ indexname: string }>("SELECT indexname FROM pg_indexes WHERE tablename = 'docs' ORDER BY 1");
+    const idx = await db.query<{ indexname: string }>("SELECT indexname FROM pg_indexes WHERE tablename = 'docs' AND schemaname = current_schema() ORDER BY 1");
     expect(idx.map((r) => r.indexname).filter((n) => n !== "docs_bm25_idx")).toEqual(["docs_embedding_idx", "docs_pkey", "docs_tsv_idx"]);
     const [r] = await db.query<{ tsv: string }>("SELECT tsv::text AS tsv FROM docs WHERE id = 'd1'");
     expect(r.tsv).toMatch(/'vitamin':1A/); // title terms carry weight A
